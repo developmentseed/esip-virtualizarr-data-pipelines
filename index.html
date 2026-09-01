@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtualizarr Data Pipelines</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --navy:#0B2545; --deep:#065A82; --teal:#1C7293; --mint:#57C4B5;
+    --ice:#CFE3EE; --paper:#FFFFFF; --ink:#12283A; --mute:#5B7186;
+    --codebg:#0E2233; --codefg:#D6E9F2; --amber:#E0A458; --coral:#D9695A; --green:#3FA796;
+    --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+
+  .reveal{ font-family:var(--sans); font-size:30px; color:var(--ink); }
+  .reveal .slides{ text-align:left; }
+  .reveal h1,.reveal h2,.reveal h3{ font-family:var(--serif); color:var(--navy); text-transform:none; letter-spacing:-.01em; line-height:1.06; margin:0 0 .35em; }
+  .reveal h1{ font-size:1.95em; font-weight:600; }
+  .reveal h2{ font-size:1.5em; font-weight:600; }
+  .reveal h3{ font-size:1.05em; font-weight:600; }
+  .reveal p,.reveal li{ line-height:1.4; }
+  .reveal strong{ color:var(--navy); }
+  .reveal em{ color:var(--mute); }
+  .reveal a{ color:var(--teal); }
+  .reveal section{ padding:0; }
+
+  /* eyebrow / kicker */
+  .kicker{ font-family:var(--sans); font-size:.46em; font-weight:700; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--teal); margin:0 0 .5em; }
+  .kicker.warn{ color:var(--coral); }
+
+  /* code */
+  .reveal pre{ box-shadow:0 6px 22px rgba(11,37,69,.16); width:100%; margin:.4em 0; font-size:.62em; }
+  .reveal pre code{ border-radius:10px; padding:1em 1.1em; max-height:none; font-family:var(--mono);
+    line-height:1.45; background:var(--codebg); color:var(--codefg); display:block; }
+  .inlinecode,.reveal code:not(pre code){ font-family:var(--mono); background:#EAF2F8; color:var(--deep);
+    padding:.08em .35em; border-radius:5px; font-size:.85em; }
+
+  /* layout primitives */
+  .cols{ display:flex; gap:.7em; align-items:stretch; }
+  .col{ flex:1; }
+  /* equal-height cards without percentage heights (height:100% here resolves
+     circularly against a stretched flex item and overflows the container) */
+  .cols > .col{ display:flex; flex-direction:column; }
+  .cols > .col > .card{ flex:1; }
+  .card{ background:#F4F8FB; border-radius:14px; padding:.85em 1em; box-shadow:0 4px 16px rgba(11,37,69,.08); }
+  .card h3{ margin:.1em 0 .25em; }
+  .card p{ font-size:.62em; margin:0; color:var(--ink); }
+  .chip{ width:1.5em; height:1.5em; border-radius:50%; display:inline-flex; align-items:center;
+    justify-content:center; color:#fff; font-size:1em; margin-bottom:.3em; }
+  .chip.navy{ background:var(--navy);} .chip.teal{ background:var(--teal);} .chip.green{ background:var(--green);} .chip.coral{ background:var(--coral);} .chip.amber{ background:var(--amber);}
+
+  .band{ background:var(--navy); color:var(--ice); border-radius:12px; padding:.7em .95em;
+    font-size:.6em; line-height:1.35; margin-top:.5em; position:relative; z-index:1; }
+  .band b{ color:var(--mint); }
+
+  .muted-cap{ color:var(--mute); font-size:.55em; font-style:italic; margin:.15em 0 0; }
+
+  /* compact stacked cards */
+  .rowcards{ display:flex; flex-direction:column; gap:.32em; }
+  .rowcards .card{ padding:.5em .7em; }
+  .rowcards .card h3{ font-size:.66em; display:flex; align-items:center; gap:.4em; margin:0 0 .15em; }
+  .rowcards .card .chip{ width:1.15em; height:1.15em; font-size:.85em; margin:0; flex:none; }
+  .rowcards .card p{ font-size:.52em; line-height:1.3; }
+
+  /* pipeline anatomy */
+  .pipe{ display:flex; align-items:stretch; gap:0; margin:.5em 0 .2em; }
+  .pseg{ border-radius:12px; padding:.55em .7em; color:#fff; box-shadow:0 5px 16px rgba(11,37,69,.18); }
+  .pseg .lbl{ font-size:.4em; font-weight:700; letter-spacing:.14em; text-transform:uppercase; opacity:.85; }
+  .pseg .cd{ font-family:var(--mono); font-weight:700; font-size:.66em; margin-top:.2em; }
+  .pseg.root{ background:var(--deep); flex:1.25; }
+  .pseg.a1{ background:var(--teal); flex:1; }
+  .pseg.a2{ background:var(--mint); flex:1; }
+  .pbar{ font-family:var(--mono); font-weight:700; color:var(--navy); font-size:1.5em;
+    align-self:center; padding:0 .12em; }
+  .pnote{ display:flex; gap:0; }
+  .pnote span{ font-size:.42em; font-style:italic; color:var(--mute); text-align:center; padding-top:.3em; }
+
+  /* before / after */
+  .ba{ display:flex; gap:.7em; align-items:stretch; }
+  .ba .panel{ flex:1; border-radius:14px; padding:.85em 1.05em; }
+  .ba .before{ background:#FBEEEC; }
+  .ba .after{ background:#ECF6F2; }
+  .ba h3{ margin:.1em 0 .4em; display:flex; align-items:center; gap:.4em; }
+  .ba .before h3{ color:#9B2F23; } .ba .after h3{ color:#1E6B5C; }
+  .ba ul{ margin:0; padding-left:1.1em; }
+  .ba li{ font-size:.6em; margin:.32em 0; }
+  .arrowmid{ align-self:center; color:var(--teal); font-size:1.6em; }
+
+  /* tables */
+  .reveal table{ font-size:.56em; border-collapse:collapse; width:100%; margin-top:.3em; }
+  .reveal th{ background:var(--navy); color:#fff; font-family:var(--sans); font-weight:700;
+    text-align:left; padding:.55em .7em; }
+  .reveal td{ padding:.5em .7em; border-bottom:1px solid #D5E2EC; vertical-align:middle; }
+  .reveal tr:nth-child(even) td{ background:#EEF5F9; }
+  .reveal td.code{ font-family:var(--mono); color:var(--deep); font-size:.95em; }
+  .reveal td.store{ font-weight:700; color:var(--ink); }
+
+  /* numbered asks */
+  .ask{ display:flex; gap:.6em; align-items:flex-start; background:#12345A; border-radius:12px;
+    padding:.6em .8em; margin:.35em 0; }
+  .ask .num{ flex:none; width:1.5em; height:1.5em; border-radius:50%; background:var(--teal);
+    color:#fff; font-family:var(--serif); font-weight:700; display:flex; align-items:center;
+    justify-content:center; font-size:1.05em; }
+  .ask .txt h3{ color:#fff; margin:.05em 0 .15em; font-size:.78em; }
+  .ask .txt p{ color:var(--ice); margin:0; font-size:.56em; line-height:1.3; }
+
+  /* title slide */
+  .title-slide{ background:var(--navy); }
+  .title-slide .kicker{ color:var(--mint); }
+  .title-slide h1{ color:#fff; font-size:2.3em; }
+  .title-slide .sub{ color:var(--ice); font-size:.72em; max-width:78%; line-height:1.35; }
+  .title-slide .rule{ width:3em; height:2px; background:var(--teal); margin:.7em 0 .5em; }
+  .title-slide .foot{ color:#9DB8CC; font-style:italic; font-size:.5em; }
+
+  /* dark closing-style slides */
+  section[data-background-color] h1{ color:#fff; }
+
+  .reveal .slide-number{ font-family:var(--mono); background:transparent; color:var(--mute); }
+
+  /* JSON token coloring helpers (used inside <pre>) */
+  .tk{ color:var(--mint); } .tv{ color:var(--ice); } .tu{ color:var(--amber); }
+  .tg{ color:var(--green); } .tc{ color:var(--coral); }
+
+  /* ---- additions for this deck ---- */
+
+  /* 5-up / 3-up card grid */
+  .grid{ display:grid; gap:.45em; }
+  .grid.g4{ grid-template-columns:repeat(4,1fr); }
+  .grid.g3{ grid-template-columns:repeat(3,1fr); }
+  .grid.g2{ grid-template-columns:repeat(2,1fr); }
+  .grid .card{ padding:.6em .75em; }
+  .grid .card h3{ font-size:.72em; display:flex; align-items:center; gap:.4em; margin:0 0 .2em; }
+  .grid .card .chip{ width:1.2em; height:1.2em; font-size:.9em; margin:0; flex:none; }
+  .grid .card p{ font-size:.54em; line-height:1.32; }
+
+  /* diagram placeholder — replaced by inline SVG in later passes */
+  .dgm{ border:2px dashed #B7CBDA; border-radius:14px; background:#F8FBFD;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:1em; margin:.4em 0; }
+  .dgm .tag{ font-family:var(--mono); font-size:.44em; font-weight:700; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--teal); }
+  .dgm .what{ font-size:.56em; color:var(--mute); margin:.35em 0 0; max-width:80%; line-height:1.35; }
+
+  /* architecture image (overrides reveal's default img border).
+     Tune the width here to trade image size against the cards below. */
+  .reveal .arch{ display:block; width:86%; height:auto; border:none; border-radius:10px;
+    background:#fff; box-shadow:0 6px 22px rgba(11,37,69,.14); margin:.1em auto 0; }
+  .arch + .grid{ margin-top:.45em; }
+
+  /* numbered step list */
+  .reveal .steps{ counter-reset:step; margin:.3em 0 0; padding:0; list-style:none; }
+  .steps li{ counter-increment:step; position:relative; padding-left:1.9em; font-size:.6em;
+    margin:.4em 0; line-height:1.35; }
+  .steps li::before{ content:counter(step); position:absolute; left:0; top:.05em;
+    width:1.35em; height:1.35em; border-radius:50%; background:var(--teal); color:#fff;
+    font-family:var(--serif); font-weight:700; font-size:.85em;
+    display:flex; align-items:center; justify-content:center; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+  <!-- 1 · TITLE -->
+  <section data-background-color="#0B2545" class="title-slide">
+    <p class="kicker">Cloud-native data pipelines</p>
+    <h1>Virtualizarr<br>Data Pipelines</h1>
+    <p class="sub">A template repository for building and operating Virtualizarr / Icechunk
+    stores on AWS - You bring your data expertise and we bring the infrastructure.</p>
+    <div class="rule"></div>
+    <p class="foot">developmentseed/virtualizarr-data-pipelines</p>
+    <aside class="notes">Virtualizarr and Icechunk have largely solved the format problem — how to expose an archive of NetCDF, HDF5 or GRIB files as a single analysis-ready virtual dataset. What has not been solved is the operational problem: everything you have to build and run to keep a store current. This talk is about the second half. We will cover why we built the template, what it actually gives you, how the backfill works, where it is running, and what it takes to adopt it.</aside>
+  </section>
+
+  <!-- 2 · WHY — DIVISION OF LABOR -->
+  <section>
+    <p class="kicker">Why we built it</p>
+    <h2>Bring the dataset knowledge, not the infrastructure</h2>
+    <div class="ba">
+      <div class="panel after" style="background:#ECF6F2">
+        <h3><span class="chip green">◆</span>Your dataset knowledge</h3>
+        <ul>
+          <li>How to <strong>parse</strong> this particular format.</li>
+          <li>How these files <strong>concatenate</strong> into a cube and along which dimension.</li>
+          <li>What the <strong>coordinate axis</strong> means, and which variables don't carry it.</li>
+          <li>Which files are <strong>appends</strong>, which are in-place <strong>region writes</strong>.</li>
+        </ul>
+      </div>
+      <div class="arrowmid">+</div>
+      <div class="panel before" style="background:#F4F8FB">
+        <h3 style="color:var(--navy)"><span class="chip teal">⚙</span>Repeatable infrastructure</h3>
+        <ul>
+          <li>Containerized Lambdas, a queue and its batching configuration.</li>
+          <li>Step Function orchestration, retries, concurrency limits.</li>
+          <li>Icechunk <strong>garbage collection</strong> on a schedule.</li>
+          <li>CDK code to configure and and deploy all the infrastructure</li>
+        </ul>
+      </div>
+    </div>
+    <div class="band"><b>The premise.</b> The second column is <b>repeatable</b> so it should be
+    written once, tested once, and deployed the same way for every dataset. Teams should
+    <b>leverage their expertise to focus on how to parse and concatenate archival files
+    without having to think too much about building infrastructure code.</b></div>
+    <aside class="notes">Here is the division of labor the project is built around. The scarce expertise is dataset-specific: how to parse this format, how these files concatenate, what the coordinate axis means, which variables are static and have to be dropped for a region write. That is the part only the data owner can write, and it is genuinely hard. Everything in the right-hand column is the same for every dataset — containerized Lambdas, a queue and its batch size, orchestration, garbage collection, buckets and IAM. Today every team building an Icechunk store re-derives that column from scratch, and re-derives its failure modes along with it. Our premise is simply that the right-hand column is repeatable infrastructure. Write it once, test it, and let people deploy it identically for each new dataset. The README line is the thesis: leverage your expertise to focus on parsing and concatenating, without having to think too much about building infrastructure code.</aside>
+  </section>
+
+  <!-- 3 · WHAT THE TEMPLATE GIVES YOU -->
+  <section>
+    <p class="kicker">What it is</p>
+    <h2>A template repository, not a framework</h2>
+    <div class="grid g3">
+      <div class="card"><h3><span class="chip navy">1</span>Start from a
+          template</h3><p>A <strong>GitHub template repository</strong>. You create your own repo from it with the naming convention: <code>datasetname-virtualizarr-data-pipelines</code> and it is yours to modify. No dependency to track, no upstream to fight.</p></div>
+      <div class="card"><h3><span class="chip navy">2</span>Implement one protocol</h3><p>Write a <code>processor.py</code> satisfying the <strong>VirtualizarrProcessor</strong> protocol. A sample processor with an in-memory store ships in the repo as a working example.</p></div>
+      <div class="card"><h3><span class="chip navy">3</span>Configure with types</h3><p>A strongly-typed <strong>settings module</strong> with sensible defaults, overridden by a <code>.env</code> file. Buckets, regions, topics, batch sizes, concurrency.</p></div>
+      <div class="card"><h3><span class="chip teal">4</span>Deploy with CDK</h3><p>The infrastructure builds your Docker images and stands up the Lambdas, the Batch job, the queue and the Step Functions orchestration. <code>cdk deploy</code>.</p></div>
+      <div class="card"><h3><span class="chip teal">5</span>Two processing paths</h3><p><strong>Backfill</strong> for the historical archive, <strong>forward processing</strong> for new files as they land. Same processor, same deployment.</p></div>
+      <div class="card" style="background:var(--navy)"><h3
+          style="color:#fff"><span class="chip"
+            style="background:var(--mint)">→</span>The shape stays fixed</h3><p
+            style="color:var(--ice)">Every dataset gets the <strong
+            style="color:var(--mint)">same deployment shape</strong>. What
+          differs between projects is the processor and the <code style="background:#12345A;color:var(--mint)">configuration</code>.</p></div>
+    </div>
+    <aside class="notes">Deliberately a template repository rather than a library or a framework. You create your own repo from it and the code is yours — there is no upstream dependency to track and nothing stopping you from changing infrastructure you need to change. What you write is one processor module satisfying the VirtualizarrProcessor protocol; a sample processor using an in-memory store and a fake virtual dataset ships in the repo so you have a working reference. Configuration is a strongly-typed settings module with defaults you override in a dot-env file. The CDK then takes your processor, builds Docker images from it, and stands up the Lambdas, the Batch job for garbage collection, the queue and the Step Functions orchestration. The payoff is the last card: the deployment shape is identical across datasets. The only things that vary from project to project are the processor and the environment file.</aside>
+  </section>
+
+  <!-- 4 · ARCHITECTURE -->
+  <section>
+    <p class="kicker">Forward processing architecture</p>
+    <h2>New files land, the store stays current</h2>
+    <img class="arch" style="width:62%" src="images/architecture.png"
+         alt="Forward processing architecture. A data bucket publishes new-object notifications to an SNS topic. SNS delivers to a file queue inside the Virtualizarr Data Pipelines stack. A Process File Lambda consumes from the queue, reads the source file back from the data bucket, and writes to the Icechunk bucket. A separate Garbage Collect job also writes to the Icechunk bucket on a schedule.">
+    <div class="grid g3">
+      <div class="card"><h3><span class="chip teal">⚡</span>Announced</h3><p>New objects in the data bucket raise <strong>S3 notifications to SNS</strong>. Set <code>SNS_TOPIC</code> and the stack wires the subscription to its queue for you.</p></div>
+      <div class="card"><h3><span class="chip teal">≡</span>Buffered</h3><p>The <strong>SQS queue</strong> absorbs bursts and sets the pace. <code>SQS_BATCH_SIZE</code> controls how many files one Lambda invocation handles — and therefore files per commit.</p></div>
+      <div class="card"><h3><span class="chip teal">♻</span>Maintained</h3><p><strong>Garbage collection</strong> runs on a Batch cluster on the schedule set by <code>GARBAGE_COLLECTION_FREQUENCY</code>, expiring old snapshots so the store doesn't grow without bound.</p></div>
+    </div>
+    <aside class="notes">This is the steady-state path. New objects arriving in the source bucket raise S3 notifications onto an SNS topic; you point the SNS_TOPIC setting at it and the stack wires up the subscription itself. The queue is doing real work here — it absorbs bursts from upstream and it sets the rate at which you write. SQS_BATCH_SIZE controls how many file messages go to a single Lambda invocation, and since the consumer commits once per batch, that setting is effectively your files-per-commit ratio. And because Icechunk keeps history, garbage collection is not optional; it runs as a scheduled Batch job, expiring snapshots older than the configured frequency. Worth stressing that this is the boring, always-on half of the system, and it is the half people usually underestimate when they build this themselves.</aside>
+  </section>
+
+  <!-- 5 · BACKFILL VS FORWARD -->
+  <section>
+    <p class="kicker">Two paths</p>
+    <h2>Load the archive once, then keep it current</h2>
+    <div class="cols">
+      <div class="col"><div class="card">
+        <h3><span class="chip navy">⛏</span>Backfill</h3>
+        <p>A <strong>one-time, high-throughput bulk load</strong> of a large body of existing files.
+        Initializes the store at <strong>full shape</strong> for every time step the inventory covers
+        and uses a partitioned <strong>fork-and-merge</strong> cooperative distributed write, so many
+        thousands of files process in parallel behind a small number of commits.
+        Orchestrated by Step Functions.
+      </div></div>
+      <div class="col"><div class="card">
+        <h3><span class="chip teal">▶</span>Forward</h3>
+        <p>The path for <strong>new production files as they become available</strong>. Files are
+        announced to an SQS queue, consumed by a Lambda, written to the <code>main</code> branch and
+        committed <strong>per batch</strong>. Not always an append: a coordinate already inside the
+        store's extent is an in-place <code>region="auto"</code> write.</p>
+      </div></div>
+    </div>
+    <p class="kicker" style="margin-top:.55em">Sequencing them</p>
+    <ol class="steps">
+      <li>Deploy with <code>BACKFILL_ENABLED=true</code>; the forward consumer is held off automatically so backfill bootstraps <code>main</code> first.</li>
+      <li>Configure <code>SNS_TOPIC</code> now — newly published files <strong>buffer in the queue</strong> while the backfill runs.</li>
+      <li>Backfill completes and promotes. Set <code>FORWARD_QUEUE_ENABLED=true</code>, redeploy, and the queue drains onto the loaded store.</li>
+      <li>Anything published between building the inventory and the subscription going live can be <strong>replayed onto the queue</strong> by hand — no data gaps.</li>
+    </ol>
+    <aside class="notes">Two complementary paths, and a typical project uses both. Backfill is the one-time bulk load of the existing archive; it declares the store at its full shape up front and uses a partitioned fork-and-merge write so thousands of files can land behind a handful of commits. It is off by default because plenty of projects only need the forward path. Forward processing handles new files as they arrive, committing once per queue batch. One subtlety worth calling out: after a backfill the store already holds a row for every coordinate in its extent, so a forward write is frequently not an append — writing it as one would duplicate the file and leave the axis non-monotonic. Those have to be in-place region writes. The sequencing matters and it is the part people get wrong. Deploy with backfill enabled and the forward consumer is held off automatically. Configure the SNS topic immediately anyway, so files published during the backfill accumulate in the queue rather than being lost. When the backfill promotes, flip the forward queue on and redeploy, and the queue drains onto a fully loaded store. Finally, there is a small window between when you built the inventory and when the subscription went live — those files can simply be pushed onto the queue manually.</aside>
+  </section>
+
+  <!-- 6 · FORK AND MERGE — WHY -->
+  <section>
+    <p class="kicker">Backfill · the problem</p>
+    <h2>Why you can't just append the archive</h2>
+    <div class="cols">
+      <div class="col"><div class="card" style="background:#FBEEEC">
+        <h3 style="color:#9B2F23;font-size:.9em"><span class="chip coral">✕</span>Appending to <code>main</code></h3>
+        <p>A thousand workers all move the <strong>same branch tip</strong>, and you get
+        <strong>one commit per file</strong> — maximum contention, worst writes-per-commit ratio.</p>
+      </div></div>
+      <div class="col"><div class="card" style="background:#ECF6F2">
+        <h3 style="color:#1E6B5C;font-size:.9em"><span class="chip green">✓</span>Fork and merge</h3>
+        <p>Declare <strong>full shape</strong> on a <code>backfill</code> branch. Workers fork a clean
+        snapshot, write <strong>disjoint regions</strong>, never commit. A reducer merges into
+        <strong>one commit</strong>.</p>
+      </div></div>
+    </div>
+    <img class="arch" style="width:48%" src="images/backfill-fork-merge.png"
+         alt="Backfill fork and merge. A file inventory is split into Partition 1 and Partition 2, each a list of file keys. Each partition forks a clean snapshot from the central Icechunk store. Within a partition, a distributed Map fans the file keys out to worker Lambdas; each worker writes into its own copy of the fork and stores the pickled fork in an S3 bucket. A Merge Forks and Commit Lambda then reads those forks and writes a single commit back to the Icechunk store. Partitions run one after another.">
+    <p class="muted-cap" style="text-align:center">Region disjointness is the <strong>operator’s responsibility</strong> — two workers writing the same region will fail to merge.</p>
+    <aside class="notes">This is the mechanism that makes bulk loading tractable. The naive approach is to run the forward path very wide: point thousands of workers at the archive and let them append. That fails on contention — every worker is trying to move the same branch tip — and even if it did not, you would be making one commit per file, which is the worst possible writes-per-commit ratio and leaves you a history to garbage collect afterwards. Fork and merge inverts it. You declare the store at its full final shape up front, on a dedicated backfill branch so the load stages to the side and main is untouched until the end. Each worker forks a clean committed snapshot, writes its files into a disjoint region of the array, and does not commit. A reducer merges all those forks into a single commit. Because only the reducer commits, there is no contention at all. The one thing to be honest about is the caption: disjointness is yours to guarantee. Two workers writing the same region will not merge, and the pipeline cannot check that for you.</aside>
+  </section>
+
+  <!-- 7 · FORK AND MERGE — HOW -->
+  <section>
+    <p class="kicker">Backfill · the mechanics</p>
+    <h2>Init → Fork → Workers → Reduce → Promote</h2>
+    <ol class="steps">
+      <li><strong>Init.</strong> The coordinator creates the store with the
+        dataset's full dimension extent for the inventory, on a <code>backfill</code> branch, and <strong>commits.</strong> Workers can only fork a clean snapshot.</li>
+      <li><strong>Partition.</strong> The inventory is split into partitions. Each becomes <strong>one commit</strong>, and partitions run <strong>serially</strong>.</li>
+      <li><strong>Fork.</strong> The coordinator forks the committed base snapshot for this partition.</li>
+      <li><strong>Workers.</strong> A distributed Map fans batches of keys to Lambdas. Each copies the fork, writes its files via <code>vds.vz.to_icechunk(fork.store, region="auto")</code>, and <strong>pickles its fork to S3</strong>. No commits.</li>
+      <li><strong>Reduce.</strong> When the partition's workers finish, a reducer merges every pickled fork into <strong>a single commit</strong>. Then the next partition forks from that new tip.</li>
+      <li><strong>Promote.</strong> After the last partition, <code>main</code> is <strong>fast-forwarded</strong> to the backfill tip.</li>
+    </ol>
+    <table>
+      <tr><th>Setting</th><th>Default</th><th>What it trades</th></tr>
+      <tr><td class="code">BACKFILL_PARTITION_SIZE</td><td class="code">500</td><td>Files per partition = files per commit. Larger means fewer commits, but a failure loses more work.</td></tr>
+      <tr><td class="code">BACKFILL_MAX_ITEMS_PER_BATCH</td><td class="code">10</td><td>Files per worker, i.e. per child fork. Bounded by the Lambda timeout.</td></tr>
+      <tr><td class="code">BACKFILL_MAX_CONCURRENCY</td><td class="code">50</td><td>Workers in flight per partition. Cap it to respect rate-limited upstreams such as NASA EDL.</td></tr>
+    </table>
+    <aside class="notes">The concrete sequence, orchestrated as an outer serial Map over partitions, each running Fork, then an inner Distributed Map of parallel worker Lambdas, then Reduce, with a final Promote. Init creates the arrays at their full final shape with coordinates written as metadata, on a backfill branch, and commits — it has to leave nothing pending, because a fork can only be merged if its base is a clean committed snapshot. Partitioning decides your commit granularity. Workers copy the fork, write with region equals auto, and pickle the fork to S3 rather than committing. The reducer merges the partition's forks into one commit, and the next partition forks from that new tip — which is why partitions are serial. Finally main is fast-forwarded to the backfill tip, and only at that moment does the loaded data become visible on main. The table is where the operational judgment lives. Partition size is a bet: bigger partitions mean fewer commits but more lost work when a partition fails, because none of its files commit. Items per batch is bounded by the Lambda timeout. And concurrency is where you protect a rate-limited upstream from yourself — if you are pulling through something like NASA Earthdata Login, this is the setting that keeps you from being throttled.</aside>
+  </section>
+
+  <!-- 8 · WHERE IT IS DEPLOYED  [SEAN: fill scale + status] -->
+  <section>
+    <p class="kicker">In the field</p>
+    <h2>Where it is running</h2>
+    <div class="grid g3">
+      <div class="card"><h3><span class="chip navy">◉</span>NOAA HRRR</h3>
+        <p>High-Resolution Rapid Refresh — the 3&nbsp;km convection-allowing forecast model over
+        CONUS, on hourly cycles.</p></div>
+
+      <div class="card"><h3><span class="chip navy">◉</span>NASA TEMPO</h3>
+        <p>Geostationary air-quality spectrometer, scanning North America hourly through the
+        daylight hours.</p></div>
+
+      <div class="card"><h3><span class="chip navy">◉</span>NOAA NAQFC</h3>
+        <p>National Air Quality Forecast Capability — operational ozone and PM<sub>2.5</sub>
+        forecast guidance.</p></div>
+
+      <div class="card"><h3><span class="chip teal">◉</span>GOES CF</h3>
+        <p>CF-convention GOES geostationary observations.</p></div>
+
+      <div class="card"><h3><span class="chip teal">◉</span>GPM IMERG</h3>
+        <p>Half-hourly global precipitation, backfilled from the archive and kept current on the
+        forward path.</p></div>
+
+      <div class="card" style="background:var(--navy)"><h3 style="color:#fff"><span class="chip" style="background:var(--mint)">→</span>Five datasets, one stack</h3>
+        <p style="color:var(--ice)">Weather models, air-quality forecasts, geostationary imagery and
+        precipitation — <strong style="color:var(--mint)">different formats, cadences and volumes</strong>,
+        the same deployment.</p></div>
+    </div>
+    <div class="band"><b>The point.</b> These have little in common as datasets. What they share is
+    everything <b>below</b> the processor — which is the argument for making that half repeatable.</div>
+    <aside class="notes">Where this is actually running. Five deployments, and deliberately not five variations on the same dataset. HRRR is a high-resolution numerical weather model on hourly cycles. TEMPO is a geostationary air-quality spectrometer scanning North America hourly during daylight. NAQFC is operational air-quality forecast guidance. GOES CF is geostationary observational imagery. And GPM IMERG is half-hourly global precipitation. Different agencies, different source formats, very different cadences and volumes — an hourly forecast cycle behaves nothing like a half-hourly observational archive. The thing worth drawing out is the last card: what these share is not the data, it is everything underneath the processor. Each one implements its own parsing and concatenation logic, and then deploys the identical stack. That is the whole argument of the talk, demonstrated rather than asserted. [Fill in file counts, store extents and production-versus-in-progress status before presenting.]</aside>
+  </section>
+
+  <!-- 9 · ADOPTING IT -->
+  <section>
+    <p class="kicker">Adoption</p>
+    <h2>What it takes to stand one up</h2>
+    <div class="cols">
+      <div class="col">
+        <ol class="steps">
+          <li><strong>Create your repo</strong> from the template.</li>
+          <li><strong>Write <code>processor.py</code></strong> against the protocol, replacing the sample.</li>
+          <li><strong>Add tests</strong> — in-memory Icechunk fixtures ship with the template.</li>
+          <li><strong>Configure <code>.env</code></strong>: buckets, region, SNS topic, batch sizes.</li>
+          <li><strong>Review</strong> with <code>cdk synth</code>, then <code>cdk deploy</code>.</li>
+          <li><strong>Backfill</strong>: upload an inventory, run <code>start_backfill.sh</code>.</li>
+          <li><strong>Enable forward processing</strong> and redeploy.</li>
+        </ol>
+      </div>
+      <div class="col">
+        <div class="rowcards">
+          <div class="card"><h3><span class="chip green">▶</span>Forward methods</h3><p><code>initialize_repo</code> · <code>initialize_session</code> · <code>process_file</code> · <code>commit_processed_files</code></p></div>
+          <div class="card"><h3><span class="chip navy">⛏</span>Backfill methods</h3><p><code>initialize_backfill_store</code> · <code>open_backfill_repo</code> · <code>process_backfill_file</code></p></div>
+          <div class="card"><h3><span class="chip teal">♻</span>Shared</h3><p><code>garbage_collect</code> — used by both paths, run on the configured schedule.</p></div>
+        </div>
+        <div class="band" style="margin-top:.4em"><b>That's the surface.</b> Eight methods and an
+        <b>.env</b> file. Everything else on the previous slides is already written and tested.</div>
+      </div>
+    </div>
+    <aside class="notes">This is the honest accounting of what adoption costs. Seven steps on the left, and the right-hand column is the entire API surface you implement. Four methods drive forward processing: open the repository, open a writable session, process a file, commit. Three more are backfill-specific: initialize the backfill store at full shape, open the repo, and write a single file into a worker's fork without committing. Garbage collect is shared. That is it — eight methods and an environment file, and only five of them if you skip backfill. Worth pausing on step three: the template ships in-memory Icechunk fixtures and sample tests, so you can develop and test your processor without deploying anything to AWS. That is usually where most of the work actually happens, and it is a fast loop. Everything on the architecture and backfill slides — the orchestration, the fork and merge, the queue wiring, the garbage collection — is already written and under test.</aside>
+  </section>
+
+  <!-- 10 · CLOSING -->
+  <section data-background-color="#0B2545">
+    <p class="kicker" style="color:var(--mint)">Takeaways</p>
+    <h1 style="font-size:1.6em">Infrastructure once,<br>datasets many</h1>
+    <div class="grid g3" style="margin-top:.5em">
+      <div class="card" style="background:#12345A"><h3 style="color:#fff"><span class="chip" style="background:var(--mint)">1</span>Repeatable by design</h3><p style="color:var(--ice)">The infrastructure half of an Icechunk pipeline is the same for every dataset. Write it once, deploy it identically.</p></div>
+      <div class="card" style="background:#12345A"><h3 style="color:#fff"><span class="chip" style="background:var(--mint)">2</span>Both paths, one processor</h3><p style="color:var(--ice)">Fork-and-merge backfill for the archive, queue-driven forward processing to stay current — behind a single protocol.</p></div>
+      <div class="card" style="background:#12345A"><h3 style="color:#fff"><span class="chip" style="background:var(--mint)">3</span>Yours to fork</h3><p style="color:var(--ice)">A template repository under an open license. Take it, change it, and tell us what broke.</p></div>
+    </div>
+    <p style="color:var(--ice);font-size:.62em;margin-top:.7em">
+      <strong style="color:#fff">github.com/developmentseed/virtualizarr-data-pipelines</strong>
+    </p>
+    <p style="color:#9DB8CC;font-style:italic;font-size:.5em;margin-top:.3em">Questions, issues and pull requests welcome.</p>
+    <aside class="notes">To close. The argument is a simple one: the infrastructure half of a Virtualizarr and Icechunk pipeline is the same for every dataset, so it should be written and tested once and deployed identically, leaving teams to spend their time on the dataset knowledge only they have. You get both a bulk-load path and a steady-state path behind one processor protocol. And because it is a template repository rather than a framework, adopting it does not couple you to us — fork it, change what you need, and open an issue when something does not fit your data. That last part is genuinely the ask: the more datasets this gets pointed at, the better the defaults get. Happy to take questions.</aside>
+  </section>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js"></script>
+<script>
+  Reveal.initialize({
+    hash:true, slideNumber:'c/t', controls:true, progress:true,
+    transition:'fade', transitionSpeed:'fast',
+    width:1280, height:720, margin:0.06,
+    plugins:[ RevealNotes ]
+  });
+</script>
+</body>
+</html>
